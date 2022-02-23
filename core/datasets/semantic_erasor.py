@@ -140,16 +140,16 @@ class ErasorCarlaInternal:
         self.seqs = []
         if split == 'train':
             self.seqs = [
-                'scenario3', 'scenario5', 'scenario6', 'scenario8',
+                'scenario2', 'scenario3', 'scenario5', 'scenario8',
             ]
 
         elif self.split == 'val':
             self.seqs = [
-                'scenario3', 'scenario5', 'scenario6', 'scenario8',
+                'scenario6',
             ]
         elif self.split == 'test':
             self.seqs = [
-               'scenario3', 'scenario5', 'scenario6', 'scenario8',
+               'scenario6',
             ]
 
         self.map_files = dict()
@@ -157,7 +157,7 @@ class ErasorCarlaInternal:
         self.files = []
 
         for seq in self.seqs:
-            self.map_files[seq] = os.path.join(self.root, 'testing_map', seq, 'v0.1/map.npy')
+            self.map_files[seq] = os.path.join(self.root, 'testing_map/v0.1', seq, 'map.npy')
             # self.odom_files[seq] = os.path.join(self.root, 'testing_data', seq, 'odom', 'scan', 'odometry.txt')
             seq_files = sorted(os.listdir(os.path.join(self.root, 'testing_data', seq, 'global_npz')))
             seq_files = [os.path.join(self.root, 'testing_data', seq, 'global_npz', x) for x in seq_files]

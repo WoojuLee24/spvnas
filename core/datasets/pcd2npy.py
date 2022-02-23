@@ -31,7 +31,7 @@ root_path = "/ws/data/erasor_carla/carla_dataset/"
 # save map npy data
 for seq in seqs:
     print(seq)
-    map_path = os.path.join(root_path, "testing_map/v0.1", seq, "map.pcd")
+    map_path = os.path.join(root_path, "testing_map/v0.05", seq, "map.pcd")
     new_map_path = os.path.splitext(map_path)[0] + ".npy"
     points = read_pc(map_path)
     np.save(new_map_path, points)

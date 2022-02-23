@@ -1,5 +1,5 @@
 data:
-  num_classes: 19
+  num_classes: 2
   ignore_label: 255
   training_size: 19132
 
@@ -13,7 +13,7 @@ dataset:
   num_points: 80000
   voxel_size: 0.05
 
-num_epochs: 15
+num_epochs: 5
 batch_size: 2
 
 criterion:
