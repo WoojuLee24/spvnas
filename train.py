@@ -61,6 +61,11 @@ def main() -> None:
             num_replicas=dist.size(),
             rank=dist.rank(),
             shuffle=(split == 'train'))
+        # sampler = torch.utils.data.distributed.DistributedSampler(
+        #     dataset[split],
+        #     num_replicas=dist.size(),
+        #     rank=dist.rank(),
+        #     shuffle=False)
         dataflow[split] = torch.utils.data.DataLoader(
             dataset[split],
             batch_size=configs.batch_size,

@@ -91,8 +91,14 @@ class SPVCNN(nn.Module):
             self.pres = kwargs['pres']
             self.vres = kwargs['vres']
 
+        # self.stem = nn.Sequential(
+        #     spnn.Conv3d(4, cs[0], kernel_size=3, stride=1),
+        #     spnn.BatchNorm(cs[0]), spnn.ReLU(True),
+        #     spnn.Conv3d(cs[0], cs[0], kernel_size=3, stride=1),
+        #     spnn.BatchNorm(cs[0]), spnn.ReLU(True))
+
         self.stem = nn.Sequential(
-            spnn.Conv3d(4, cs[0], kernel_size=3, stride=1),
+            spnn.Conv3d(3, cs[0], kernel_size=3, stride=1),
             spnn.BatchNorm(cs[0]), spnn.ReLU(True),
             spnn.Conv3d(cs[0], cs[0], kernel_size=3, stride=1),
             spnn.BatchNorm(cs[0]), spnn.ReLU(True))

@@ -204,7 +204,6 @@ class SemanticKITTIInternal:
                 all_labels = np.fromfile(a, dtype=np.int32).reshape(-1)
         else:
             all_labels = np.zeros(pc_.shape[0]).astype(np.int32)
-
         labels_ = self.label_map[all_labels & 0xFFFF].astype(np.int64)
 
         feat_ = block
