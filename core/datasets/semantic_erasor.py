@@ -125,7 +125,8 @@ class ErasorCarlaInternal:
                  sample_stride=1,
                  submit=False,
                  google_mode=True,
-                 window=10):
+                 window=10,
+                 visualize=False):
         if submit:
             trainval = True
         else:
@@ -137,19 +138,20 @@ class ErasorCarlaInternal:
         self.sample_stride = sample_stride
         self.google_mode = google_mode
         self.window = window
+        self.visualize = visualize
         self.seqs = []
         if split == 'train':
             self.seqs = [
-                'scenario3', 'scenario5', 'scenario6', 'scenario8',
+                'scenario2', 'scenario3', 'scenario5', 'scenario8',
             ]
 
         elif self.split == 'val':
             self.seqs = [
-                'scenario3', 'scenario5', 'scenario6', 'scenario8',
+                'scenario6',
             ]
         elif self.split == 'test':
             self.seqs = [
-               'scenario3', 'scenario5', 'scenario6', 'scenario8',
+               'scenario6',
             ]
 
         self.map_files = dict()
@@ -157,7 +159,7 @@ class ErasorCarlaInternal:
         self.files = []
 
         for seq in self.seqs:
-            self.map_files[seq] = os.path.join(self.root, 'testing_map', seq, 'v0.1/map.npy')
+            self.map_files[seq] = os.path.join(self.root, 'testing_map/v0.1', seq, 'map.npy')
             # self.odom_files[seq] = os.path.join(self.root, 'testing_data', seq, 'odom', 'scan', 'odometry.txt')
             seq_files = sorted(os.listdir(os.path.join(self.root, 'testing_data', seq, 'global_npz')))
             seq_files = [os.path.join(self.root, 'testing_data', seq, 'global_npz', x) for x in seq_files]
@@ -234,7 +236,7 @@ class ErasorCarlaInternal:
                                        np.cos(theta), 0], [0, 0, 1]])
             block[...] = block_[...]
             block[:, :3] = np.dot(block[:, :3], transform_mat)
-            map[:, :3] = np.dot(map[:, :3], transform_mat)
+            map[:, :3] = np.dot(map_[:, :3], transform_mat)
 
         block[:, 3] = (block_[:, 3] == 1)
         map[:, 3] = (map_[:, 3] == 1)
@@ -299,13 +301,26 @@ class ErasorCarlaInternal:
         labels_ = SparseTensor(labels_, pc_)
         inverse_map = SparseTensor(inverse_map, pc_)
 
-        return {
+        if self.visualize == False:
+            feed_dict = {
             'lidar': lidar,
             'targets': labels,
             'targets_mapped': labels_,
             'inverse_map': inverse_map,
             'file_name': self.files[index]
         }
+
+        else:
+            feed_dict = {
+                'pc': pc,
+                'lidar': lidar,
+                'targets': labels,
+                'targets_mapped': labels_,
+                'inverse_map': inverse_map,
+                'file_name': self.files[index]
+            }
+
+        return feed_dict
 
 
 # class ErasorCarlaInternal:
@@ -469,7 +484,8 @@ class ErasorKITTIInternal:
                  sample_stride=1,
                  submit=False,
                  google_mode=True,
-                 dataset='carla'):
+                 dataset='carla',
+                 visualize=False):
         if submit:
             trainval = True
         else:
@@ -481,6 +497,7 @@ class ErasorKITTIInternal:
         self.sample_stride = sample_stride
         self.google_mode = google_mode
         self.dataset = dataset
+        self.visualize = visualize
         self.seqs = []
         if split == 'train':
             self.seqs = [
