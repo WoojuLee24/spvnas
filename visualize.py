@@ -11,7 +11,9 @@ import mayavi.mlab as mlab
 import numpy as np
 import torch
 from torchsparse import SparseTensor
-from torchsparse.utils import sparse_quantize
+from torchsparse.utils.quantize import sparse_quantize
+
+from torchpack.utils.config import configs
 
 from model_zoo import minkunet, spvcnn, spvnas_specialized
 
@@ -39,11 +41,9 @@ def process_point_cloud(input_point_cloud, input_labels=None, voxel_size=0.05):
         out_pc = input_point_cloud
         pc_ = pc_
 
-    inds, labels, inverse_map = sparse_quantize(pc_,
-                                                feat_,
-                                                labels_,
-                                                return_index=True,
-                                                return_invs=True)
+    _, inds, inverse_map = sparse_quantize(pc_,
+                                           return_index=True,
+                                           return_inverse=True)
     pc = np.zeros((inds.shape[0], 4))
     pc[:, :3] = pc_[inds]
 
@@ -195,13 +195,20 @@ def draw_lidar(pc,
 
 if __name__ == '__main__':
     parser = argparse.ArgumentParser()
+    parser.add_argument('config', metavar='FILE', help='config file')
     parser.add_argument('--velodyne-dir', type=str, default='sample_data')
     parser.add_argument('--model',
                         type=str,
                         default='SemanticKITTI_val_SPVNAS@65GMACs')
+    parser.add_argument('--checkpoint',
+                        type=str,
+                        default=None)
     args = parser.parse_args()
     output_dir = os.path.join(args.velodyne_dir, 'outputs')
     os.makedirs(output_dir, exist_ok=True)
+
+    args, opts = parser.parse_known_args()
+    configs.load(args.config, recursive=True)
 
     if torch.cuda.is_available():
         device = 'cuda:0'
@@ -211,7 +218,23 @@ if __name__ == '__main__':
     if 'MinkUNet' in args.model:
         model = minkunet(args.model, pretrained=True)
     elif 'SPVCNN' in args.model:
-        model = spvcnn(args.model, pretrained=True)
+        # model = spvcnn(args.model, pretrained=True)
+        # model = spvcnn(args.model, pretrained=False, cfg=args.cfg, checkpoint=args.checkpoint)
+        from core.models.semantic_kitti import SPVCNN
+
+        if 'cr' in configs.model:
+            cr = configs.model.cr
+        else:
+            cr = 1.0
+        model = SPVCNN(num_classes=2,
+                       cr=cr,
+                       pres=configs.dataset.voxel_size,
+                       vres=configs.dataset.voxel_size)
+
+        if args.checkpoint:
+            init = torch.load(args.checkpoint)['model']
+            model.load_state_dict(init)
+
     elif 'SPVNAS' in args.model:
         model = spvnas_specialized(args.model, pretrained=True)
     else:

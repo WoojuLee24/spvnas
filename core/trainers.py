@@ -90,6 +90,11 @@ class SemanticKITTITrainer(Trainer):
         return state_dict
 
     def _load_state_dict(self, state_dict: Dict[str, Any]) -> None:
+        for key in list(state_dict['model'].keys()):
+            if 'module' in key:
+                new_key = key[7:]
+                state_dict['model'][new_key] = state_dict['model'][key]
+                del state_dict['model'][key]
         self.model.load_state_dict(state_dict['model'])
         self.scaler.load_state_dict(state_dict.pop('scaler'))
         self.optimizer.load_state_dict(state_dict['optimizer'])

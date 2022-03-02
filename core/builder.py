@@ -2,6 +2,7 @@ from typing import Callable
 
 import torch
 import torch.optim
+from core.focal_loss import FocalLoss
 from torch import nn
 from torchpack.utils.config import configs
 from torchpack.utils.typing import Dataset, Optimizer, Scheduler
@@ -55,6 +56,10 @@ def make_criterion() -> Callable:
     if configs.criterion.name == 'cross_entropy':
         criterion = nn.CrossEntropyLoss(
             ignore_index=configs.criterion.ignore_index)
+    elif configs.criterion.name == 'focal_loss':
+        criterion = FocalLoss(
+            classes=2, gamma=2, alpha=0.75, eps=1e-7
+        )
     else:
         raise NotImplementedError(configs.criterion.name)
     return criterion

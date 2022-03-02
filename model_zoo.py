@@ -100,7 +100,7 @@ def minkunet(net_id, pretrained=True, **kwargs):
     return model
 
 
-def spvcnn(net_id, pretrained=True, **kwargs):
+def spvcnn(net_id, pretrained=True, checkpoint=None, **kwargs):
     url_base = 'https://hanlab.mit.edu/files/SPVNAS/spvcnn/'
     net_config = json.load(
         open(
@@ -121,4 +121,9 @@ def spvcnn(net_id, pretrained=True, **kwargs):
                           map_location='cuda:%d' % dist.local_rank()
                           if torch.cuda.is_available() else 'cpu')['model']
         model.load_state_dict(init)
+
+    if checkpoint:
+        init = torch.load(checkpoint)
+        model.load_state_dict(init)
+
     return model

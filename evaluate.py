@@ -62,16 +62,33 @@ def main() -> None:
     if 'spvnas' in args.name.lower():
         model = spvnas_specialized(args.name)
     elif 'spvcnn' in args.name.lower():
-        model = spvcnn(args.name)
+        # model = spvcnn(args.name)
+        from core.models.semantic_kitti import SPVCNN
+
+        if 'cr' in configs.model:
+            cr = configs.model.cr
+        else:
+            cr = 1.0
+        model = SPVCNN(num_classes=2,
+                       cr=cr,
+                       pres=configs.dataset.voxel_size,
+                       vres=configs.dataset.voxel_size)
+
     elif 'mink' in args.name.lower():
         model = minkunet(args.name)
     else:
         raise NotImplementedError
 
-    model = torch.nn.parallel.DistributedDataParallel(
-        model.cuda(),
-        device_ids=[dist.local_rank()],
-        find_unused_parameters=True)
+    # model = torch.nn.parallel.DistributedDataParallel(
+    #     model.cuda(),
+    #     device_ids=[dist.local_rank()],
+    #     find_unused_parameters=True)
+    if torch.cuda.is_available():
+        device = 'cuda:0'
+    else:
+        device = 'cpu'
+
+    model = model.to(device)
     model.eval()
 
     criterion = builder.make_criterion()
@@ -121,6 +138,10 @@ def main() -> None:
             _targets.append(targets_mapped)
         outputs = torch.cat(_outputs, 0)
         targets = torch.cat(_targets, 0)
+        outputs_0 = (outputs == 0).sum(dim=0)
+        outputs_1 = (outputs == 1).sum(dim=0)
+        targets_0 = (targets == 0).sum(dim=0)
+        targets_1 = (targets == 1).sum(dim=0)
         output_dict = {'outputs': outputs, 'targets': targets}
         trainer.after_step(output_dict)
 
