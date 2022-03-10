@@ -29,3 +29,5 @@ optimizer:
 
 scheduler:
   name: cosine_warmup
+
+visualize: True

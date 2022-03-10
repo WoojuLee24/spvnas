@@ -7,6 +7,7 @@ import torch.backends.cudnn
 import torch.cuda
 import torch.nn
 import torch.utils.data
+import numpy as np
 from torchpack import distributed as dist
 from torchpack.callbacks import Callbacks, SaverRestore
 from torchpack.environ import auto_set_run_dir, set_run_dir
@@ -30,6 +31,7 @@ def main() -> None:
     parser.add_argument('config', metavar='FILE', help='config file')
     parser.add_argument('--run-dir', metavar='DIR', help='run directory')
     parser.add_argument('--name', type=str, help='model name')
+    parser.add_argument('--save', action="store_true")
     args, opts = parser.parse_known_args()
 
     configs.load(args.config, recursive=True)
@@ -138,10 +140,33 @@ def main() -> None:
             _targets.append(targets_mapped)
         outputs = torch.cat(_outputs, 0)
         targets = torch.cat(_targets, 0)
-        outputs_0 = (outputs == 0).sum(dim=0)
-        outputs_1 = (outputs == 1).sum(dim=0)
-        targets_0 = (targets == 0).sum(dim=0)
-        targets_1 = (targets == 1).sum(dim=0)
+
+        if args.save:
+            input_file_name = feed_dict['file_name']
+            scenario = input_file_name[0].split("/")[-3]
+            file_index = (input_file_name[0].split("/")[-1]).replace("npz", "npy")
+            prediction_file = os.path.join("/ws/data/erasor_carla/carla_dataset/predictions/v0.1_np480000_fl/",
+                                           scenario + "_" + file_index)
+            target_file = os.path.join("/ws/data/erasor_carla/carla_dataset/predictions/v0.1_np480000_fl/",
+                                       scenario + "_target_" + file_index)
+            input_pc = feed_dict['pc']
+            input_pc = np.squeeze(input_pc)
+            input_pc = input_pc.detach().cpu().numpy()
+            outputs_np = outputs.detach().cpu().numpy()
+            outputs_np = outputs_np[..., np.newaxis]
+            input_pc_pred = np.concatenate((input_pc, outputs_np), axis=1)
+            np.save(prediction_file, input_pc_pred)
+
+            targets_np = targets.detach().cpu().numpy()
+            targets_np = targets_np[..., np.newaxis]
+            input_pc_target = np.concatenate((input_pc, targets_np), axis=1)
+            np.save(target_file, input_pc_target)
+
+
+        # outputs_0 = (outputs == 0).sum(dim=0)
+        # outputs_1 = (outputs == 1).sum(dim=0)
+        # targets_0 = (targets == 0).sum(dim=0)
+        # targets_1 = (targets == 1).sum(dim=0)
         output_dict = {'outputs': outputs, 'targets': targets}
         trainer.after_step(output_dict)
 

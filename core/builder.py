@@ -23,7 +23,10 @@ def make_dataset() -> Dataset:
         from core.datasets import ErasorCarla
         dataset = ErasorCarla(root=configs.dataset.root,
                               num_points=configs.dataset.num_points,
-                              voxel_size=configs.dataset.voxel_size)
+                              voxel_size=configs.dataset.voxel_size,
+                              visualize=configs.visualize)
+
+
     else:
         raise NotImplementedError(configs.dataset.name)
     return dataset
