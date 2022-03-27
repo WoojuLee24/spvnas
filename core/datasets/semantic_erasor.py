@@ -130,7 +130,8 @@ class ErasorCarlaInternal:
                  sample_stride=1,
                  submit=False,
                  google_mode=True,
-                 window=10):
+                 window=10,
+                 radius=50):
         if submit:
             trainval = True
         else:
@@ -143,6 +144,7 @@ class ErasorCarlaInternal:
         self.google_mode = google_mode
         self.window = window
         self.visualize = visualize
+        self.radius = radius
         self.seqs = []
         if split == 'train':
             self.seqs = [
@@ -162,10 +164,16 @@ class ErasorCarlaInternal:
         # self.odom_files = dict()
         self.files = []
 
+        # get scan and map data list
         for seq in self.seqs:
             self.map_files[seq] = os.path.join(self.root, 'testing_map/v0.1', seq, 'map.npy')
             # self.odom_files[seq] = os.path.join(self.root, 'testing_data', seq, 'odom', 'scan', 'odometry.txt')
             seq_files = sorted(os.listdir(os.path.join(self.root, 'testing_data', seq, 'global_npz')))
+            # filtering the seq_files if index is out of window
+            # 281 -> window 10 -> window select f4, b5 (10) -> 0 ~ 3 remove, 277 ~ 281 remove -> 4 ~ 276
+            # 281 -> window 11 -> window select f5, b5 (11) -> 0 ~ 4 remove, 277 ~ 281 remove -> 5 ~ 276
+            seq_files = seq_files[(self.window + 1) // 2 - 1: - (self.window // 2) + 1]
+
             seq_files = [os.path.join(self.root, 'testing_data', seq, 'global_npz', x) for x in seq_files]
             self.files.extend(seq_files)
 
@@ -199,17 +207,37 @@ class ErasorCarlaInternal:
         block_ = scan['arr_0'].astype(np.float32)
         odom = scan['arr_1'].astype(np.float32)
 
+        if self.window > 1:
+            # 281 -> window 10 -> window select f4, b5 (10) -> 0 ~ 3 remove, 277 ~ 281 remove -> 4 ~ 276
+            # 281 -> window 11 -> window select f5, b5 (11) -> 0 ~ 4 remove, 277 ~ 281 remove -> 5 ~ 276
+            # index_list: index - (self.window + 1) // 2 + 1: index + self.window // 2 + 1
+            file_name = os.path.basename(self.files[index])
+            file_dir = os.path.dirname(self.files[index])
+            file_name_wo_ext = os.path.splitext(file_name)[0]
+            file_int = int(file_name_wo_ext)
+            file_int_list = list(range(file_int - (self.window + 1) // 2 + 1, file_int + self.window // 2 + 1, 1))
+            file_str_list = [file_dir + "/" + str(i).zfill(6) + ".npz" for i in file_int_list]
+            block_ = []
+            for file in file_str_list:
+                scan_ = np.load(file)
+                block_single = scan_['arr_0'].astype(np.float32)
+                block_.extend(block_single)
+            block_ = np.asarray(block_)
+            # radius search w.r.t the odom of scan data
+            block_ = block_[np.sum(np.square(block_[:, :3] - odom), axis=-1) < self.radius*self.radius]
+
         # get map_data
         scenario = self.files[index]
         scenario = scenario.split("/")[-3]
         map_ = self.map[scenario]
-        radius = 2500
-        map_ = map_[np.sum(np.square(map_[:, :3] - odom), axis=-1) < radius]
+        # radius search w.r.t the odom of scan data
+        map_ = map_[np.sum(np.square(map_[:, :3] - odom), axis=-1) < self.radius*self.radius]
 
         block = np.zeros_like(block_)
         map = np.zeros_like(map_)
 
         if 'train' in self.split:
+            # data augmentation on the train dataset
             theta = np.random.uniform(0, 2 * np.pi)
             scale_factor = np.random.uniform(0.95, 1.05)
             rot_mat = np.array([[np.cos(theta), np.sin(theta), 0],
@@ -229,9 +257,11 @@ class ErasorCarlaInternal:
             block[:, :3] = np.dot(block[:, :3], transform_mat)
             map[:, :3] = np.dot(map_[:, :3], transform_mat)
 
+        # parsing the original label to the dynamic label
         block[:, 3] = (block_[:, 3] == 1)
         map[:, 3] = (map_[:, 3] == 1)
 
+        # get point and voxel in the format of sparse torch tensor
         map_data = self.get_point_voxel(map[:, :3], map[:, 3], index)
         scan_data = self.get_point_voxel(block[:, :3], block[:, 3], index)
 
