@@ -61,7 +61,7 @@ def make_criterion() -> Callable:
             ignore_index=configs.criterion.ignore_index)
     elif configs.criterion.name == 'focal_loss':
         criterion = FocalLoss(
-            classes=2, gamma=2, alpha=0.75, eps=1e-7
+            classes=2, gamma=configs.criterion.gamma, alpha=configs.criterion.alpha, eps=1e-7
         )
     else:
         raise NotImplementedError(configs.criterion.name)
