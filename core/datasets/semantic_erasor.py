@@ -130,7 +130,7 @@ class ErasorCarlaInternal:
                  sample_stride=1,
                  submit=False,
                  google_mode=True,
-                 window=10,
+                 window=1,
                  radius=50):
         if submit:
             trainval = True
@@ -172,7 +172,7 @@ class ErasorCarlaInternal:
             # filtering the seq_files if index is out of window
             # 281 -> window 10 -> window select f4, b5 (10) -> 0 ~ 3 remove, 277 ~ 281 remove -> 4 ~ 276
             # 281 -> window 11 -> window select f5, b5 (11) -> 0 ~ 4 remove, 277 ~ 281 remove -> 5 ~ 276
-            seq_files = seq_files[(self.window + 1) // 2 - 1: - (self.window // 2) + 1]
+            seq_files = seq_files[(self.window + 1) // 2 - 1: - (1 + self.window // 2)]
 
             seq_files = [os.path.join(self.root, 'testing_data', seq, 'global_npz', x) for x in seq_files]
             self.files.extend(seq_files)
