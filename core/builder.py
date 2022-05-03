@@ -24,7 +24,8 @@ def make_dataset() -> Dataset:
         dataset = ErasorCarla(root=configs.dataset.root,
                               num_points=configs.dataset.num_points,
                               voxel_size=configs.dataset.voxel_size,
-                              visualize=configs.visualize)
+                              visualize=configs.visualize,
+                              configs=configs)
 
 
     else:

@@ -6,6 +6,8 @@ from torchsparse import SparseTensor
 from torchsparse.utils.collate import sparse_collate_fn
 from torchsparse.utils.quantize import sparse_quantize
 
+from sklearn.neighbors import KDTree
+
 __all__ = ['ErasorCarla']
 
 label_name_mapping = {
@@ -76,7 +78,7 @@ def get_pose(path):
 
 class ErasorCarla(dict):
 
-    def __init__(self, root, voxel_size, num_points, visualize, **kwargs):
+    def __init__(self, root, voxel_size, num_points, visualize, configs, **kwargs):
         submit_to_server = kwargs.get('submit', False)
         sample_stride = kwargs.get('sample_stride', 1)
         google_mode = kwargs.get('google_mode', False)
@@ -85,37 +87,42 @@ class ErasorCarla(dict):
             super().__init__({
                 'train':
                     ErasorCarlaInternal(root,
-                                          voxel_size,
-                                          num_points,
-                                          visualize,
-                                          sample_stride=1,
-                                          split='train',
-                                          submit=True,),
+                                        voxel_size,
+                                        num_points,
+                                        visualize,
+                                        sample_stride=1,
+                                        split='train',
+                                        submit=True,
+                                        configs=configs),
                 'test':
                     ErasorCarlaInternal(root,
-                                          voxel_size,
-                                          num_points,
-                                          visualize,
-                                          sample_stride=1,
-                                          split='test')
+                                        voxel_size,
+                                        num_points,
+                                        visualize,
+                                        sample_stride=1,
+                                        split='test',
+                                        configs=configs)
             })
         else:
             super().__init__({
                 'train':
                     ErasorCarlaInternal(root,
-                                          voxel_size,
-                                          num_points,
-                                          visualize,
-                                          sample_stride=1,
-                                          split='train',
-                                          google_mode=google_mode),
+                                        voxel_size,
+                                        num_points,
+                                        visualize,
+                                        sample_stride=1,
+                                        split='train',
+                                        google_mode=google_mode,
+                                        configs=configs
+                                        ),
                 'test':
                     ErasorCarlaInternal(root,
-                                          voxel_size,
-                                          num_points,
-                                          visualize,
-                                          sample_stride=sample_stride,
-                                          split='val')
+                                        voxel_size,
+                                        num_points,
+                                        visualize,
+                                        sample_stride=sample_stride,
+                                        split='val',
+                                        configs=configs)
             })
 
 
@@ -127,11 +134,12 @@ class ErasorCarlaInternal:
                  num_points,
                  visualize,
                  split,
+                 configs,
                  sample_stride=1,
                  submit=False,
                  google_mode=True,
                  window=1,
-                 radius=50):
+                 radius=50,):
         if submit:
             trainval = True
         else:
@@ -146,9 +154,12 @@ class ErasorCarlaInternal:
         self.visualize = visualize
         self.radius = radius
         self.seqs = []
+        self.configs = configs
+
         if split == 'train':
             self.seqs = [
-                'scenario2', 'scenario3', 'scenario5', 'scenario8',
+                # 'scenario2',
+                'scenario3', 'scenario5', 'scenario8',
             ]
 
         elif self.split == 'val':
@@ -166,7 +177,7 @@ class ErasorCarlaInternal:
 
         # get scan and map data list
         for seq in self.seqs:
-            self.map_files[seq] = os.path.join(self.root, 'testing_map/v0.1', seq, 'map.npy')
+            self.map_files[seq] = os.path.join(self.root, 'testing_map/v0.1_erasor_patchwork', seq, 'map.npy')
             # self.odom_files[seq] = os.path.join(self.root, 'testing_data', seq, 'odom', 'scan', 'odometry.txt')
             seq_files = sorted(os.listdir(os.path.join(self.root, 'testing_data', seq, 'global_npz')))
             # filtering the seq_files if index is out of window
@@ -289,6 +300,10 @@ class ErasorCarlaInternal:
         pc = pc_[inds]
         feat = feat_[inds]
         labels = labels_[inds]
+        labels = self.propose_near_dynamic_points(pc,
+                                                  labels,
+                                                  self.configs.erasor.leaf_size,
+                                                  self.configs.erasor.k)
         lidar = SparseTensor(feat, pc)
         labels = SparseTensor(labels, pc)
         labels_ = SparseTensor(labels_, pc_)
@@ -314,6 +329,15 @@ class ErasorCarlaInternal:
             }
 
         return feed_dict
+
+    def propose_near_dynamic_points(self, points, labels, leaf_size=40, k=10):
+        """propose top k near points from dynamic points"""
+        # nearest point search intialization
+        tree = KDTree(points, leaf_size=leaf_size)
+        dist, ind = tree.query(points, k=k)
+        # index of the top 5 near points from dynamic points -> set -> label the point as dynamic point
+        labels[np.unique(ind[labels == 1])] = 1
+        return labels
 
 
 class ErasorKITTIInternal:

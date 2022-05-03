@@ -13,6 +13,10 @@ dataset:
   num_points: 480000
   voxel_size: 0.1
 
+erasor:
+  leaf_size: 40
+  k: 10
+
 num_epochs: 5
 batch_size: 2
 
