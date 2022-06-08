@@ -23,7 +23,7 @@ erasor:
   thres: 0.02
 
 num_epochs: 5
-batch_size: 1
+batch_size: 2
 
 criterion:
   name: focal_loss
