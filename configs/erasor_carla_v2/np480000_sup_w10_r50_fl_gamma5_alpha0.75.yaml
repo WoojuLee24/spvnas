@@ -1,0 +1,51 @@
+data:
+  num_classes: 2
+  ignore_label: 255
+  training_size: 19132
+
+train:
+  seed: 1588147245
+  deterministic: False
+
+dataset:
+  name: erasor_carla
+  root: /ws/data/erasor_carla/carla_v0.2
+  num_points: 480000
+  voxel_size: 0.1
+
+erasor:
+  leaf_size: 0
+  knn: 0
+  map_supervised: True
+  erasor_proposal: False
+  window: 10
+  radius: 50
+  thres: 0.02
+
+workers_per_gpu: 8
+distributed: True
+amp_enabled: True
+
+num_epochs: 5
+batch_size: 1
+
+model:
+  name: spvcnn
+
+criterion:
+  name: focal_loss
+  gamma: 5
+  alpha: 0.75
+  ignore_index: 255
+
+optimizer:
+  name: sgd
+  lr: 2.4e-1
+  weight_decay: 1.0e-4
+  momentum: 0.9
+  nesterov: true
+
+scheduler:
+  name: cosine_warmup
+
+visualize: False
