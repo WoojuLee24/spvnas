@@ -77,7 +77,7 @@ def main() -> None:
     model = builder.make_model().cuda()
     if configs.distributed:
         model = torch.nn.parallel.DistributedDataParallel(
-            model, device_ids=[dist.local_rank()], find_unused_parameters=True)
+            model, device_ids=[dist.local_rank()], find_unused_parameters=False)
 
     criterion = builder.make_criterion()
     optimizer = builder.make_optimizer(model)
