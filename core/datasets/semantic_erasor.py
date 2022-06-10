@@ -1,10 +1,13 @@
 import os
 import os.path
+from tqdm import tqdm
 
 import numpy as np
 from torchsparse import SparseTensor
-from torchsparse.utils.collate import sparse_collate_fn
+# from torchsparse.utils.collate import sparse_collate_fn
 from torchsparse.utils.quantize import sparse_quantize
+
+from .collate import sparse_collate_fn
 
 from sklearn.neighbors import KDTree
 
@@ -139,113 +142,145 @@ class ErasorCarlaInternal:
                  submit=False,
                  google_mode=True,
                  window=1,
-                 radius=50,):
-        if submit:
-            trainval = True
-        else:
-            trainval = False
+                 radius=50,
+                 thres=0.02,):
+
         self.root = root
         self.split = split
+        self.google_mode = google_mode
+        self.visualize = visualize
+
         self.voxel_size = voxel_size
         self.num_points = num_points
         self.sample_stride = sample_stride
-        self.google_mode = google_mode
-        self.window = window
-        self.visualize = visualize
-        self.radius = radius
+        self.window = configs.erasor.window
+        self.radius = configs.erasor.radius
+        self.thres = configs.erasor.thres
+
         self.seqs = []
         self.configs = configs
 
         if split == 'train':
             self.seqs = [
-                # 'scenario2',
-                'scenario3', 'scenario5', 'scenario8',
+                'scenario1', 'scenario2', 'scenario3', 'scenario4', 'scenario6', 'scenario7', 'scenario8', 'scenario9',
             ]
 
         elif self.split == 'val':
             self.seqs = [
-                'scenario6',
+                'scenario5',
             ]
+
         elif self.split == 'test':
             self.seqs = [
-               'scenario6',
+               'scenario5',
             ]
 
         self.map_files = dict()
-        # self.odom_files = dict()
-        self.files = []
+        self.scan_files = []
+        self.removed_scan_files = []
 
         # get scan and map data list
         for seq in self.seqs:
-            self.map_files[seq] = os.path.join(self.root, 'testing_map/v0.1_erasor_patchwork', seq, 'map.npy')
-            # self.odom_files[seq] = os.path.join(self.root, 'testing_data', seq, 'odom', 'scan', 'odometry.txt')
-            seq_files = sorted(os.listdir(os.path.join(self.root, 'testing_data', seq, 'global_npz')))
+            self.map_files[seq] = os.path.join(self.root, 'map', seq, 'map.npy')
+            seq_files = sorted(os.listdir(os.path.join(self.root, 'scan', seq, 'npz')))
             # filtering the seq_files if index is out of window
             # 281 -> window 10 -> window select f4, b5 (10) -> 0 ~ 3 remove, 277 ~ 281 remove -> 4 ~ 276
             # 281 -> window 11 -> window select f5, b5 (11) -> 0 ~ 4 remove, 277 ~ 281 remove -> 5 ~ 276
             seq_files = seq_files[(self.window + 1) // 2 - 1: - (1 + self.window // 2)]
-
-            seq_files = [os.path.join(self.root, 'testing_data', seq, 'global_npz', x) for x in seq_files]
-            self.files.extend(seq_files)
+            seq_files = [os.path.join(self.root, 'scan', seq, 'npz', x) for x in seq_files]
+            self.scan_files.extend(seq_files)
 
         # get map_data
         self.map = dict()
         for seq, map_file in self.map_files.items():
             map_ = np.load(map_file)
             # map = generate_voxels(map_, voxel_size=self.voxel_size)
+            # map_[:, 4] = self.revise_dynamic_points(map_[:, :3], map_[:, 4], self.thres)
             self.map[seq] = map_.astype(np.float32)
 
+        # # exclude scan file with no overlap
+        # for scan_file in sorted(self.scan_files):
+        #     scan = np.load(scan_file)
+        #     odom = scan['arr_1'].astype(np.float32)
+        #     scenario = scan_file.split("/")[-3]
+        #     map_ = self.map[scenario]
+        #     map_r = map_[np.sum(np.square(map_[:, :3] - odom), axis=-1) < self.radius * self.radius]
+        #     if map_r.shape[0] < self.num_points / 5:
+        #     # if map_r.shape[0] == 0:
+        #         self.scan_files.remove(scan_file)
+        #         self.removed_scan_files.extend(scan_file)
+        #         print("scan_file ", scan_file, " was removed. ")
+        #         print("map_r shape: ", map_r.shape)
+        #     else:
+        #         print("scan_file ", scan_file, " was not removed. ")
+        #         print("map_r shape: ", map_r.shape)
+
         if self.sample_stride > 1:
-            self.files = self.files[::self.sample_stride]
+            self.scan_files = self.scan_files[::self.sample_stride]
 
         # self.num_classes = list(label_name_mapping.keys())[-1] + 1
         self.num_classes = 2
         self.angle = 0.0
 
+    def revise_dynamic_points(self, points, labels, thres):
+        labels[(labels != 0) & (points[:, 2] < thres)] = 0
+        return labels
+
+    def concatenate_scans(self, index):
+        scan = np.load(self.scan_files[index])
+        odom = scan['arr_1'].astype(np.float32)
+        # 281 -> window 10 -> window select f4, b5 (10) -> 0 ~ 3 remove, 277 ~ 281 remove -> 4 ~ 276
+        # 281 -> window 11 -> window select f5, b5 (11) -> 0 ~ 4 remove, 277 ~ 281 remove -> 5 ~ 276
+        # index_list: index - (self.window + 1) // 2 + 1: index + self.window // 2 + 1
+        file_name = os.path.basename(self.scan_files[index])
+        file_dir = os.path.dirname(self.scan_files[index])
+        file_name_wo_ext = os.path.splitext(file_name)[0]
+        file_int = int(file_name_wo_ext)
+        file_int_list = list(range(file_int - (self.window + 1) // 2 + 1, file_int + self.window // 2 + 1, 1))
+        file_str_list = [file_dir + "/" + str(i).zfill(6) + ".npz" for i in file_int_list]
+        block_ = []
+        for file in file_str_list:
+            scan_ = np.load(file)
+            block_single = scan_['arr_0'].astype(np.float32)
+            block_.extend(block_single)
+        block_ = np.asarray(block_)
+        # radius search w.r.t the odom of scan data
+        block_ = block_[np.sum(np.square(block_[:, :3] - odom), axis=-1) < self.radius * self.radius]
+
+        return block_, odom
+
     def set_angle(self, angle):
         self.angle = angle
 
     def __len__(self):
-        return len(self.files)
+        return len(self.scan_files)
 
     def __getitem__(self, index):
 
-        # file_name = self.files[index]
-        # scan_index = file_name.split("/")[-1]
-
         # get scan_data
-        scan = np.load(self.files[index])
-        block_ = scan['arr_0'].astype(np.float32)
-        odom = scan['arr_1'].astype(np.float32)
+        if self.window == 1:
+            scan = np.load(self.scan_files[index])
+            block_ = scan['arr_0'].astype(np.float32)
+            odom = scan['arr_1'].astype(np.float32)
+            block_r = block_[np.sum(np.square(block_[:, :3] - odom), axis=-1) < self.radius * self.radius]
 
-        if self.window > 1:
-            # 281 -> window 10 -> window select f4, b5 (10) -> 0 ~ 3 remove, 277 ~ 281 remove -> 4 ~ 276
-            # 281 -> window 11 -> window select f5, b5 (11) -> 0 ~ 4 remove, 277 ~ 281 remove -> 5 ~ 276
-            # index_list: index - (self.window + 1) // 2 + 1: index + self.window // 2 + 1
-            file_name = os.path.basename(self.files[index])
-            file_dir = os.path.dirname(self.files[index])
-            file_name_wo_ext = os.path.splitext(file_name)[0]
-            file_int = int(file_name_wo_ext)
-            file_int_list = list(range(file_int - (self.window + 1) // 2 + 1, file_int + self.window // 2 + 1, 1))
-            file_str_list = [file_dir + "/" + str(i).zfill(6) + ".npz" for i in file_int_list]
-            block_ = []
-            for file in file_str_list:
-                scan_ = np.load(file)
-                block_single = scan_['arr_0'].astype(np.float32)
-                block_.extend(block_single)
-            block_ = np.asarray(block_)
-            # radius search w.r.t the odom of scan data
-            block_ = block_[np.sum(np.square(block_[:, :3] - odom), axis=-1) < self.radius*self.radius]
+        else:
+            # concatenate the scan data with window size
+            block_r, odom = self.concatenate_scans(index)
 
         # get map_data
-        scenario = self.files[index]
-        scenario = scenario.split("/")[-3]
+        scan_files = self.scan_files[index]
+        scenario = scan_files.split("/")[-3]
         map_ = self.map[scenario]
         # radius search w.r.t the odom of scan data
-        map_ = map_[np.sum(np.square(map_[:, :3] - odom), axis=-1) < self.radius*self.radius]
+        map_r = map_[np.sum(np.square(map_[:, :3] - odom), axis=-1) < self.radius * self.radius]
+        if map_r.shape[0] < self.num_points / 10:
+            print("map_r points shortage")
+            print("index: ", index)
+            print("scan_files: ", self.scan_files[index])
 
-        block = np.zeros_like(block_)
-        map = np.zeros_like(map_)
+        block_T = block_r
+        map_T = map_r
 
         if 'train' in self.split:
             # data augmentation on the train dataset
@@ -255,8 +290,8 @@ class ErasorCarlaInternal:
                                 [-np.sin(theta),
                                  np.cos(theta), 0], [0, 0, 1]])
 
-            block[:, :3] = np.dot(block_[:, :3], rot_mat) * scale_factor
-            map[:, :3] = np.dot(map_[:, :3], rot_mat) * scale_factor
+            block_T[:, :3] = np.dot(block_r[:, :3], rot_mat) * scale_factor
+            map_T[:, :3] = np.dot(map_r[:, :3], rot_mat) * scale_factor
 
         else:
             theta = self.angle
@@ -264,17 +299,16 @@ class ErasorCarlaInternal:
                                        np.sin(theta), 0],
                                       [-np.sin(theta),
                                        np.cos(theta), 0], [0, 0, 1]])
-            block[...] = block_[...]
-            block[:, :3] = np.dot(block[:, :3], transform_mat)
-            map[:, :3] = np.dot(map_[:, :3], transform_mat)
+            block_T[:, :3] = np.dot(block_r[:, :3], transform_mat)
+            map_T[:, :3] = np.dot(map_r[:, :3], transform_mat)
 
         # parsing the original label to the dynamic label
-        block[:, 3] = (block_[:, 3] == 1)
-        map[:, 3] = (map_[:, 3] == 1)
+        block_T[:, 3:] = (block_r[:, 3:] != 0)
+        map_T[:, 3:] = (map_r[:, 3:] != 0)
 
         # get point and voxel in the format of sparse torch tensor
-        map_data = self.get_point_voxel(map[:, :3], map[:, 3], index)
-        scan_data = self.get_point_voxel(block[:, :3], block[:, 3], index)
+        map_data = self.get_point_voxel(map_T, index)
+        # scan_data = self.get_point_voxel(block_T, index)
 
         return map_data
         # return map_data, scan_data
@@ -283,11 +317,22 @@ class ErasorCarlaInternal:
     def collate_fn(inputs):
         return sparse_collate_fn(inputs)
 
-    def get_point_voxel(self, block, labels_, index):
-        pc_ = np.round(block[:, :3] / self.voxel_size).astype(np.int32)
-        pc_ -= pc_.min(0, keepdims=1)
+    def get_point_voxel(self, points, index):
+        # points_ -> pc_ -> pc, labels_ -> labels, proposals_ -> proposals
+        if np.shape(points)[-1] == 6:
+            points_, labels_, proposals_ = points[:, :3], points[:, 3], points[:, 4]
+        elif np.shape(points)[-1] == 4:
+            points_, labels_, proposals_ = points[:, :3], points[:, 3], None
 
-        feat_ = block
+        # voxelization & get inds
+        try:
+            pc_ = np.round(points_ / self.voxel_size).astype(np.int32)
+            pc_ -= pc_.min(0, keepdims=1)
+        except:
+            print("pc_.shape: ", pc_.shape)
+            print("scan_file: ", self.scan_files[index])
+
+        feat_ = points_
 
         _, inds, inverse_map = sparse_quantize(pc_,
                                                return_index=True,
@@ -300,35 +345,55 @@ class ErasorCarlaInternal:
         pc = pc_[inds]
         feat = feat_[inds]
         labels = labels_[inds]
-        labels = self.propose_near_dynamic_points(pc,
-                                                  labels,
-                                                  self.configs.erasor.leaf_size,
-                                                  self.configs.erasor.k)
+
         lidar = SparseTensor(feat, pc)
-        labels = SparseTensor(labels, pc)
-        labels_ = SparseTensor(labels_, pc_)
+        targets = SparseTensor(labels, pc)
+        targets_mapped = SparseTensor(labels_, pc_)
         inverse_map = SparseTensor(inverse_map, pc_)
 
-        if self.visualize == False:
-            feed_dict = {
+        if proposals_ is not None:
+            proposals = proposals_[inds]
+            proposals = SparseTensor(proposals, pc)
+            proposals_ = SparseTensor(proposals_, pc_)
+            """
+            if int(self.configs.erasor.knn) > 0:
+                proposals = self.propose_near_dynamic_points(pc,
+                                                             proposals,
+                                                             self.configs.erasor.leaf_size,
+                                                             self.configs.erasor.k)
+            """
+        else:
+            proposals = proposals_
+
+        if ('train' in self.split) and (self.configs.erasor.erasor_proposal) and (proposals_ != None):
+            targets = proposals
+            targets_mapped = proposals_
+
+        feed_dict = {
+            'points_': points_,
+            'pc_': pc_,
+            'inds': inds,
+            'pc': pc,
+            'feat': feat,
+            'labels': labels,
             'lidar': lidar,
-            'targets': labels,
-            'targets_mapped': labels_,
+            'targets': targets,
+            'targets_mapped': targets_mapped,
+            'proposals': proposals,
             'inverse_map': inverse_map,
-            'file_name': self.files[index]
+            'file_name': self.scan_files[index]
         }
 
-        else:
-            feed_dict = {
-                'pc': block[:, :3],
-                'lidar': lidar,
-                'targets': labels,
-                'targets_mapped': labels_,
-                'inverse_map': inverse_map,
-                'file_name': self.files[index]
-            }
-
         return feed_dict
+
+    def save_points(self, points, labels, label2color, path):
+        #     points = (points - points.mean()) / points.std()
+        import open3d as o3d
+        colors = np.array([label2color[x] for x in labels])
+        pcd = o3d.geometry.PointCloud()
+        pcd.points = o3d.utility.Vector3dVector(points)
+        pcd.colors = o3d.utility.Vector3dVector(colors)
+        o3d.io.write_point_cloud(path, pcd)
 
     def propose_near_dynamic_points(self, points, labels, leaf_size=40, k=10):
         """propose top k near points from dynamic points"""
@@ -350,8 +415,7 @@ class ErasorKITTIInternal:
                  split,
                  sample_stride=1,
                  submit=False,
-                 google_mode=True,
-                 dataset='carla'):
+                 google_mode=True):
         if submit:
             trainval = True
         else:
@@ -362,7 +426,6 @@ class ErasorKITTIInternal:
         self.num_points = num_points
         self.sample_stride = sample_stride
         self.google_mode = google_mode
-        self.dataset = dataset
         self.visualize = visualize
         self.seqs = []
         if split == 'train':
