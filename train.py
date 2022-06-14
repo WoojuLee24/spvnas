@@ -22,6 +22,7 @@ from core.trainers import SemanticKITTITrainer
 def main() -> None:
     parser = argparse.ArgumentParser()
     parser.add_argument('config', metavar='FILE', help='config file')
+    parser.add_argument('--checkpoint', metavar='FILE', help='config file')
     parser.add_argument('--run-dir', metavar='DIR', help='run directory')
     args, opts = parser.parse_known_args()
 
@@ -90,6 +91,9 @@ def main() -> None:
                                    num_workers=configs.workers_per_gpu,
                                    seed=seed,
                                    amp_enabled=configs.amp_enabled)
+    if args.checkpoint is not None:
+        trainer._load_state_dict(torch.load(args.checkpoint))
+
     trainer.train_with_defaults(
         dataflow['train'],
         num_epochs=configs.num_epochs,
