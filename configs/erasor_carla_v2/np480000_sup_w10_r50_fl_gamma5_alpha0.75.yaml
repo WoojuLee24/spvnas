@@ -12,15 +12,17 @@ dataset:
   root: /ws/data/erasor_carla/carla_v0.2
   num_points: 480000
   voxel_size: 0.1
+  debug: False
 
 erasor:
-  leaf_size: 0
-  knn: 0
+  cluster: 0
+  map_only: True
   map_supervised: True
   erasor_proposal: False
   window: 10
   radius: 50
   thres: 0.02
+  aug: none
 
 workers_per_gpu: 8
 distributed: True
