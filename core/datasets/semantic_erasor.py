@@ -162,17 +162,17 @@ class ErasorCarlaInternal:
 
         if split == 'train':
             self.seqs = [
-                'scenario1', 'scenario2', 'scenario3', 'scenario4', 'scenario6', 'scenario7', 'scenario8', 'scenario9',
+                'scenario1', 'scenario2', 'scenario4', 'scenario6', 'scenario7', 'scenario8', 'scenario9',
             ]
 
         elif self.split == 'val':
             self.seqs = [
-                'scenario5',
+                'scenario3',
             ]
 
         elif self.split == 'test':
             self.seqs = [
-               'scenario5',
+               'scenario3',
             ]
 
         self.map_files = dict()
@@ -181,6 +181,7 @@ class ErasorCarlaInternal:
 
         # get scan and map data list
         for seq in self.seqs:
+            # self.map_files[seq] = os.path.join(self.root, 'map', seq, 'map_cluster.npy')
             self.map_files[seq] = os.path.join(self.root, 'map', seq, 'map.npy')
             seq_files = sorted(os.listdir(os.path.join(self.root, 'scan', seq, 'npz')))
             # filtering the seq_files if index is out of window
@@ -304,7 +305,8 @@ class ErasorCarlaInternal:
 
         # parsing the original label to the dynamic label
         block_T[:, 3:] = (block_r[:, 3:] != 0)
-        map_T[:, 3:] = (map_r[:, 3:] != 0)
+        map_T[:, 3] = (map_r[:, 3] != 0)
+        map_T[:, 4] = (map_r[:, 4] != 0)
 
         # get point and voxel in the format of sparse torch tensor
         map_data = self.get_point_voxel(map_T, index)
@@ -319,7 +321,7 @@ class ErasorCarlaInternal:
 
     def get_point_voxel(self, points, index):
         # points_ -> pc_ -> pc, labels_ -> labels, proposals_ -> proposals
-        if np.shape(points)[-1] == 6:
+        if np.shape(points)[-1] >= 6:
             points_, labels_, proposals_ = points[:, :3], points[:, 3], points[:, 4]
         elif np.shape(points)[-1] == 4:
             points_, labels_, proposals_ = points[:, :3], points[:, 3], None
